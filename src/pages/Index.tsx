@@ -7,10 +7,9 @@ import { generateMinuta } from '@/lib/minutaGenerator';
 import { EXAMPLES, ExampleData } from '@/lib/examples';
 import { toast } from 'sonner';
 
-const MARCO_OPTIONS = ['', 'DER original', 'Reafirmação da DER', 'Desde a citação (tema 1124)', 'Outro'];
+const MARCO_OPTIONS = ['', 'DER original', 'Reafirmação da DER', 'Desde a citação (tema 1124)', 'Outro'] as const;
 
 const Index = () => {
-  // Form state
   const [periodosControvertidos, setPeriodosControvertidos] = useState('');
   const [periodosAcolhidos, setPeriodosAcolhidos] = useState('');
   const [beneficioConcedido, setBeneficioConcedido] = useState(false);
@@ -25,7 +24,6 @@ const Index = () => {
   const [casasDecimais, setCasasDecimais] = useState(1);
   const [limiarSucumbencia, setLimiarSucumbencia] = useState(10);
 
-  // Result state
   const [result, setResult] = useState<CalcResult | null>(null);
   const [minuta, setMinuta] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
@@ -121,7 +119,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b bg-card">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -139,7 +136,6 @@ const Index = () => {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        {/* Examples dropdown */}
         <div className="mb-5 flex items-center gap-3">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Beaker className="h-4 w-4" />
@@ -160,9 +156,7 @@ const Index = () => {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
-          {/* Left column — Form */}
           <div className="space-y-4">
-            {/* Section A — Períodos */}
             <FormSection
               title="Períodos Controvertidos"
               description="Cole períodos da planilha, PDF ou texto livre"
@@ -176,7 +170,7 @@ const Index = () => {
                   id="periodosControvertidos"
                   value={periodosControvertidos}
                   onChange={e => setPeriodosControvertidos(e.target.value)}
-                  placeholder="Ex.: 01/01/1990 a 31/12/1995&#10;01/06/1998 a 30/06/2003"
+                  placeholder={"Ex.: 01/01/1990 a 31/12/1995\n01/06/1998 a 30/06/2003"}
                   className="min-h-[100px] w-full resize-vertical rounded-md border bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
@@ -197,7 +191,6 @@ const Index = () => {
               </p>
             </FormSection>
 
-            {/* Section B — Benefício */}
             <FormSection
               title="Resultado do Benefício"
               description="Dados sobre concessão e datas (DER/DIB)"
@@ -282,7 +275,7 @@ const Index = () => {
               {beneficioConcedido && (
                 <div>
                   <label htmlFor="marcoDefinidoPor" className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Marco definido por (opcional, apenas memória de cálculo)
+                    Marco definido por (opcional)
                   </label>
                   <select
                     id="marcoDefinidoPor"
@@ -298,7 +291,6 @@ const Index = () => {
               )}
             </FormSection>
 
-            {/* Section C — Dano Moral */}
             <FormSection
               title="Dano Moral"
               description="Se houver pedido de indenização por danos morais"
@@ -368,7 +360,6 @@ const Index = () => {
               )}
             </FormSection>
 
-            {/* Section D & E — AJG + Parâmetros */}
             <FormSection
               title="AJG e Parâmetros"
               description="Gratuidade, casas decimais e limiar de sucumbência mínima"
@@ -438,7 +429,6 @@ const Index = () => {
               </div>
             </FormSection>
 
-            {/* Errors */}
             {errors.length > 0 && (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
                 {errors.map((e, i) => (
@@ -449,7 +439,6 @@ const Index = () => {
               </div>
             )}
 
-            {/* Action buttons */}
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={handleCalculate}
@@ -484,9 +473,7 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Right column — Results */}
           <div className="space-y-4">
-            {/* Score summary cards */}
             {result && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg border bg-card p-3 text-center shadow-sm">
@@ -504,10 +491,8 @@ const Index = () => {
               </div>
             )}
 
-            {/* Calculation Memory */}
             {result && <CalculationMemory result={result} />}
 
-            {/* Minuta */}
             <div className="rounded-lg border bg-card shadow-sm">
               <div className="flex items-center gap-2 border-b px-4 py-3">
                 <FileText className="h-4 w-4 text-primary" />
@@ -516,7 +501,7 @@ const Index = () => {
               </div>
               <div className="p-4">
                 {minuta ? (
-                  <pre className="whitespace-pre-wrap rounded-md bg-mono p-4 font-mono text-xs leading-relaxed text-mono-foreground">
+                  <pre className="whitespace-pre-wrap rounded-md bg-muted p-4 font-mono text-xs leading-relaxed text-foreground">
                     {minuta}
                   </pre>
                 ) : (
@@ -529,7 +514,6 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Footer */}
         <footer className="mt-8 border-t pt-4 text-center text-xs text-muted-foreground">
           Funciona 100% offline no navegador. Nenhum dado é enviado a servidores.
         </footer>
