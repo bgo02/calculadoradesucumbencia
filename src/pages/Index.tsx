@@ -5,6 +5,7 @@ import { CalculationMemory } from '@/components/CalculationMemory';
 import { CalcInput, CalcResult, calculate } from '@/lib/calculator';
 import { generateMinuta } from '@/lib/minutaGenerator';
 import { EXAMPLES, ExampleData } from '@/lib/examples';
+import { formatDateInput, formatCurrencyInput, parseCurrency } from '@/lib/formatters';
 import { toast } from 'sonner';
 
 const MARCO_OPTIONS = ['', 'DER original', 'Reafirmação da DER', 'Desde a citação (tema 1124)', 'Outro'] as const;
@@ -18,8 +19,8 @@ const Index = () => {
   const [dibFixada, setDibFixada] = useState('');
   const [marcoDefinidoPor, setMarcoDefinidoPor] = useState('');
   const [danoPedido, setDanoPedido] = useState(false);
-  const [valorCausa, setValorCausa] = useState(0);
-  const [valorDanos, setValorDanos] = useState(0);
+  const [valorCausaDisplay, setValorCausaDisplay] = useState('');
+  const [valorDanosDisplay, setValorDanosDisplay] = useState('');
   const [ajg, setAjg] = useState(true);
   const [casasDecimais, setCasasDecimais] = useState(1);
   const [limiarSucumbencia, setLimiarSucumbencia] = useState(10);
@@ -37,8 +38,10 @@ const Index = () => {
     setDibFixada(ex.dibFixada);
     setMarcoDefinidoPor(ex.marcoDefinidoPor);
     setDanoPedido(ex.danoPedido);
-    setValorCausa(ex.valorCausa);
-    setValorDanos(ex.valorDanos);
+    const vc = ex.valorCausa;
+    const vd = ex.valorDanos;
+    setValorCausaDisplay(vc ? (vc / 100 * 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '');
+    setValorDanosDisplay(vd ? (vd / 100 * 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '');
     setAjg(ex.ajg);
     setCasasDecimais(ex.casasDecimais);
     setLimiarSucumbencia(ex.limiarSucumbencia);
@@ -49,6 +52,8 @@ const Index = () => {
   }, []);
 
   const handleCalculate = useCallback(() => {
+    const valorCausa = parseCurrency(valorCausaDisplay);
+    const valorDanos = parseCurrency(valorDanosDisplay);
     const input: CalcInput = {
       periodosControvertidos,
       periodosAcolhidos,
@@ -78,7 +83,7 @@ const Index = () => {
     setResult(r);
     setMinuta(generateMinuta(r));
     toast.success('Cálculo realizado com sucesso!');
-  }, [periodosControvertidos, periodosAcolhidos, beneficioConcedido, dataAjuizamento, derPedida, dibFixada, marcoDefinidoPor, danoPedido, valorCausa, valorDanos, ajg, casasDecimais, limiarSucumbencia]);
+  }, [periodosControvertidos, periodosAcolhidos, beneficioConcedido, dataAjuizamento, derPedida, dibFixada, marcoDefinidoPor, danoPedido, valorCausaDisplay, valorDanosDisplay, ajg, casasDecimais, limiarSucumbencia]);
 
   const handleCopy = useCallback(() => {
     if (!minuta) return;
@@ -107,8 +112,8 @@ const Index = () => {
     setDibFixada('');
     setMarcoDefinidoPor('');
     setDanoPedido(false);
-    setValorCausa(0);
-    setValorDanos(0);
+    setValorCausaDisplay('');
+    setValorDanosDisplay('');
     setAjg(true);
     setCasasDecimais(1);
     setLimiarSucumbencia(10);
@@ -176,7 +181,7 @@ const Index = () => {
               </div>
               <div>
                 <label htmlFor="periodosAcolhidos" className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Períodos acolhidos (deferidos) — opcional
+                  Períodos acolhidos (deferidos) *
                 </label>
                 <textarea
                   id="periodosAcolhidos"
@@ -234,7 +239,7 @@ const Index = () => {
                     id="dataAjuizamento"
                     type="text"
                     value={dataAjuizamento}
-                    onChange={e => setDataAjuizamento(e.target.value)}
+                    onChange={e => setDataAjuizamento(formatDateInput(e.target.value))}
                     placeholder="dd/mm/aaaa"
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   />
@@ -250,7 +255,7 @@ const Index = () => {
                     id="derPedida"
                     type="text"
                     value={derPedida}
-                    onChange={e => setDerPedida(e.target.value)}
+                    onChange={e => setDerPedida(formatDateInput(e.target.value))}
                     placeholder="dd/mm/aaaa"
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                   />
@@ -264,7 +269,7 @@ const Index = () => {
                       id="dibFixada"
                       type="text"
                       value={dibFixada}
-                      onChange={e => setDibFixada(e.target.value)}
+                      onChange={e => setDibFixada(formatDateInput(e.target.value))}
                       placeholder="dd/mm/aaaa"
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     />
@@ -334,11 +339,10 @@ const Index = () => {
                     </label>
                     <input
                       id="valorCausa"
-                      type="number"
-                      min={0}
-                      value={valorCausa || ''}
-                      onChange={e => setValorCausa(Number(e.target.value))}
-                      placeholder="0,00"
+                      type="text"
+                      value={valorCausaDisplay}
+                      onChange={e => setValorCausaDisplay(formatCurrencyInput(e.target.value))}
+                      placeholder="R$ 0,00"
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
@@ -348,11 +352,10 @@ const Index = () => {
                     </label>
                     <input
                       id="valorDanos"
-                      type="number"
-                      min={0}
-                      value={valorDanos || ''}
-                      onChange={e => setValorDanos(Number(e.target.value))}
-                      placeholder="0,00"
+                      type="text"
+                      value={valorDanosDisplay}
+                      onChange={e => setValorDanosDisplay(formatCurrencyInput(e.target.value))}
+                      placeholder="R$ 0,00"
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
