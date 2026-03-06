@@ -1,10 +1,12 @@
 /**
  * Generates the "minuta" text for pasting into court decisions.
- * All canonical texts are defined here as templates.
+ * Architecture: scenario-based templates with derived flags.
  */
 
 import { CalcResult } from './calculator';
 import { formatDate } from './periodParser';
+
+// ── Helpers ──────────────────────────────────────────────────
 
 function pct(v: number, dec: number): string {
   return (v * 100).toFixed(dec) + '%';
@@ -14,125 +16,171 @@ function fmtMoney(v: number): string {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-// ============================================================
-// CANONICAL TEMPLATES — edit here to change output text
-// ============================================================
+// ── Derived context ──────────────────────────────────────────
 
-const TEMPLATES = {
-  // A) Base — always present
-  base: `Para a distribuição dos ônus de sucumbência, adoto critério objetivo de proveito econômico estimado, a partir do resultado efetivo dos pedidos formulados.`,
+interface MinutaCtx {
+  r: CalcResult;
+  dec: number;
+  sp: string;
+  sb: string;
+  st: string;
+  sf: string;
+  isBeneficioConcedido: boolean;
+  isDibIgualOuAnterior: boolean;
+  isDibPosterior: boolean;
+  isSucumbenciaIntegralReu: boolean;
+  isSucumbenciaIntegralAutor: boolean;
+  isReciproca: boolean;
+  isMinimaAutor: boolean;
+  isMinimaReu: boolean;
+  hasDanos: boolean;
+  hasAjg: boolean;
+}
 
-  // B) Bloco tempo de contribuição — always present
-  blocoTempo: `Nos pedidos vinculados ao tempo de contribuição, considero dois componentes com pesos equivalentes: (i) o êxito no reconhecimento dos períodos controvertidos; e (ii) o êxito no pedido temporal de concessão do benefício na data postulada (DER/DIB), mensurado exclusivamente pela diferença entre a DER/DIB pedida e a DIB fixada, tomando por referência o retroativo existente na data do ajuizamento.`,
-
-  // C1) Benefício não concedido
-  benefNaoConcedido: (sp: string, sb: string) =>
-    `No caso concreto, o êxito quanto aos períodos foi de ${sp}. Como o benefício não foi concedido, o componente relativo à concessão resulta em ${sb}.`,
-
-  // C2) DIB = DER pedida (ou anterior)
-  benefDibIgualDer: (sp: string, sb: string) =>
-    `No caso concreto, o êxito quanto aos períodos foi de ${sp}. A DIB foi fixada na data postulada (ou em data anterior), razão pela qual o componente relativo à concessão resulta em ${sb}.`,
-
-  // C3) DIB diversa e posterior
-  benefDibDiversa: (sp: string, obtido: number, total: number, sb: string) =>
-    `No caso concreto, o êxito quanto aos períodos foi de ${sp}. Como a DIB fixada é posterior à DER/DIB pedida, o componente relativo à concessão é estimado pela proporção do retroativo efetivamente obtido na data do ajuizamento, calculado a partir de ${obtido} dias de retroativo efetivo sobre ${total} dias de retroativo pretendido, resultando em ${sb}.`,
-
-  // D) Fecho tempo
-  fechoTempo: (st: string) =>
-    `A partir desses dois componentes, obtém-se êxito combinado de ${st} nos pedidos relativos ao tempo de contribuição.`,
-
-  // E) Dano moral
-  danoMoral: (vd: string, vc: string, prop: string) =>
-    `Além disso, havendo pedido de indenização por dano moral no valor de ${vd} dentro de valor de causa de ${vc}, aplico redutor proporcional de ${prop} ao êxito global, a fim de refletir objetivamente a parcela econômica que o pedido indenizatório representa na composição do valor da causa.`,
-
-  // F) Resultado final
-  resultadoFinal: (sf: string) =>
-    `Com isso, o êxito global para fins de sucumbência resulta em ${sf}.`,
-
-  // Conclusão sucumbência
-  conclusao: (autorPct: string, reuPct: string) =>
-    `Integra-se a sucumbência na proporção de ${autorPct}% em favor da parte autora e ${reuPct}% em favor da parte ré.`,
-
-  // Honorários — benefício concedido
-  honorConcedido: `Fixo os honorários advocatícios nos patamares mínimos do art. 85, §3º, do CPC, observada a base de cálculo prevista na Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data da sentença (ou do acórdão, se for o caso), na proporção de sucumbência acima apurada.`,
-
-  // Honorários — benefício não concedido
-  honorNaoConcedido: `Fixo os honorários advocatícios em 10% sobre o valor atualizado da causa, observada a proporção de sucumbência acima apurada.`,
-
-  // AJG
-  ajg: `Concedida a gratuidade da justiça, a exigibilidade das verbas de sucumbência eventualmente devidas pela parte autora fica suspensa, nos termos do art. 98, §3º, do CPC.`,
-
-  // Custas
-  custas: `Custas na forma da lei, observadas as isenções legais e a gratuidade da justiça, se deferida.`,
-};
-
-export function generateMinuta(r: CalcResult): string {
+function buildCtx(r: CalcResult): MinutaCtx {
   const dec = r.casasDecimais;
+  const isBeneficioConcedido = r.beneficioConcedido;
+  const isDibIgualOuAnterior = isBeneficioConcedido && !!r.dibFixada && !!r.derPedida && r.dibFixada <= r.derPedida;
+  const isDibPosterior = isBeneficioConcedido && !isDibIgualOuAnterior;
+
+  const isMinimaReu = r.sucumbMinAplicada && r.autorShare === 1;
+  const isMinimaAutor = r.sucumbMinAplicada && r.autorShare === 0;
+  const isSucumbenciaIntegralReu = r.autorShare === 1;
+  const isSucumbenciaIntegralAutor = r.autorShare === 0;
+  const isReciproca = !isSucumbenciaIntegralReu && !isSucumbenciaIntegralAutor;
+
+  return {
+    r, dec,
+    sp: pct(r.scorePeriodos, dec),
+    sb: pct(r.scoreBeneficio, dec),
+    st: pct(r.scoreTempo, dec),
+    sf: pct(r.scoreFinal, dec),
+    isBeneficioConcedido,
+    isDibIgualOuAnterior,
+    isDibPosterior,
+    isSucumbenciaIntegralReu,
+    isSucumbenciaIntegralAutor,
+    isReciproca,
+    isMinimaAutor,
+    isMinimaReu,
+    hasDanos: r.danoPedido && r.propDecDanos > 0,
+    hasAjg: r.ajg,
+  };
+}
+
+// ── 1) Fundamentação ────────────────────────────────────────
+
+function buildFundamentacao(ctx: MinutaCtx): string[] {
   const parts: string[] = [];
 
-  // 1) PREMISSAS
-  parts.push(TEMPLATES.base);
-  parts.push('');
-  parts.push(TEMPLATES.blocoTempo);
-  parts.push('');
+  // Abertura
+  parts.push('Para a distribuição dos ônus de sucumbência, adota-se critério objetivo de proveito econômico estimado, em conformidade com o resultado efetivo dos pedidos deduzidos em juízo.');
 
-  // Sub-bloco concessão
-  const sp = pct(r.scorePeriodos, dec);
-  const sb = pct(r.scoreBeneficio, dec);
+  // Tempo de contribuição
+  parts.push('Nos pedidos relacionados ao tempo de contribuição, o proveito econômico é aferido a partir de dois vetores com igual peso: o êxito no reconhecimento dos períodos controvertidos e o êxito no pedido de concessão do benefício na data postulada, examinado segundo a diferença entre a DER/DIB requerida e a DIB efetivamente fixada.');
 
-  if (!r.beneficioConcedido) {
-    parts.push(TEMPLATES.benefNaoConcedido(sp, sb));
-  } else if (r.dibFixada && r.derPedida && r.dibFixada <= r.derPedida) {
-    parts.push(TEMPLATES.benefDibIgualDer(sp, sb));
+  // Subtipo do benefício
+  if (!ctx.isBeneficioConcedido) {
+    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Inexistindo concessão do benefício, o vetor correspondente ao pedido de concessão assume valor ${ctx.sb}. Desse modo, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
+  } else if (ctx.isDibIgualOuAnterior) {
+    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Tendo o benefício sido deferido na data postulada, o vetor correspondente ao pedido de concessão assume valor ${ctx.sb}. Desse modo, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
   } else {
-    parts.push(TEMPLATES.benefDibDiversa(sp, r.obtidoDiasRetro, r.totalDiasRetro, sb));
+    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Como o benefício foi deferido em data posterior à DER/DIB requerida, o vetor correspondente ao pedido de concessão é apurado pela razão entre o retroativo efetivamente obtido na data do ajuizamento (${ctx.r.obtidoDiasRetro} dias) e o retroativo pretendido (${ctx.r.totalDiasRetro} dias), resultando em ${ctx.sb}. Desse modo, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
   }
-  parts.push('');
-
-  // Fecho tempo
-  parts.push(TEMPLATES.fechoTempo(pct(r.scoreTempo, dec)));
-  parts.push('');
 
   // Dano moral
-  if (r.danoPedido && r.propDecDanos > 0) {
-    parts.push(TEMPLATES.danoMoral(
-      fmtMoney(r.valorDanos),
-      fmtMoney(r.valorCausa),
-      pct(r.propDecDanos, dec)
-    ));
-    parts.push('');
+  if (ctx.hasDanos) {
+    parts.push(`Havendo pedido de indenização por dano moral no valor de ${fmtMoney(ctx.r.valorDanos)}, inserido em valor de causa de ${fmtMoney(ctx.r.valorCausa)}, aplica-se redutor proporcional de ${pct(ctx.r.propDecDanos, ctx.dec)}, a fim de refletir a participação econômica do pedido indenizatório rejeitado na composição do valor da causa.`);
   }
 
-  // Resultado
-  parts.push(TEMPLATES.resultadoFinal(pct(r.scoreFinal, dec)));
-  parts.push('');
+  // Fecho
+  parts.push(`Considerados tais parâmetros, o êxito global para fins de sucumbência corresponde a ${ctx.sf}.`);
 
-  // 2) CONCLUSÃO
-  parts.push(TEMPLATES.conclusao(
-    r.honorAutorPct.toFixed(dec),
-    r.honorReuPct.toFixed(dec)
-  ));
-  parts.push('');
+  return parts;
+}
 
-  // 3) HONORÁRIOS
-  if (r.beneficioConcedido) {
-    parts.push(TEMPLATES.honorConcedido);
-  } else {
-    parts.push(TEMPLATES.honorNaoConcedido);
+// ── 2) Enquadramento do resultado ───────────────────────────
+
+function buildResultadoSucumbencia(ctx: MinutaCtx): string[] {
+  if (ctx.isSucumbenciaIntegralReu) {
+    return ['Verifica-se que a parte autora decaiu de parcela mínima dos pedidos, de modo que os ônus sucumbenciais devem ser integralmente suportados pela parte ré.'];
   }
-  parts.push('');
 
-  // AJG
-  if (r.ajg && r.autorShare < 1) {
-    parts.push(TEMPLATES.ajg);
-    parts.push('');
+  if (ctx.isSucumbenciaIntegralAutor) {
+    if (ctx.isMinimaAutor) {
+      return ['Verifica-se que a parte autora obteve êxito mínimo em seus pedidos, razão pela qual deve arcar integralmente com os ônus sucumbenciais.'];
+    }
+    return ['Verifica-se que a parte autora decaiu integralmente dos pedidos, razão pela qual deve arcar integralmente com os ônus sucumbenciais.'];
+  }
+
+  // Recíproca
+  const autorPct = ctx.r.honorAutorPct.toFixed(ctx.dec);
+  const reuPct = ctx.r.honorReuPct.toFixed(ctx.dec);
+  return [`Caracterizada a sucumbência recíproca, os ônus sucumbenciais são distribuídos na proporção de ${autorPct}% em favor da parte autora e de ${reuPct}% em favor da parte ré.`];
+}
+
+// ── 3) Honorários ───────────────────────────────────────────
+
+function buildHonorarios(ctx: MinutaCtx): string[] {
+  const honAutor = ctx.r.honorAutorPct.toFixed(ctx.dec);
+  const honReu = ctx.r.honorReuPct.toFixed(ctx.dec);
+
+  if (ctx.isBeneficioConcedido) {
+    if (ctx.isSucumbenciaIntegralReu) {
+      return ['Condeno o réu ao pagamento dos honorários advocatícios, que fixo nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença.'];
+    }
+    if (ctx.isSucumbenciaIntegralAutor) {
+      return ['Os honorários advocatícios são fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data da sentença, ou do acórdão, se for o caso. Condena-se a parte autora ao pagamento integral da verba honorária em favor do procurador da parte ré, não havendo verba honorária devida pelo réu ao patrono da parte autora.'];
+    }
+    return [`Os honorários advocatícios são fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença. Em razão da sucumbência recíproca, condena-se o réu ao pagamento de honorários advocatícios em favor do procurador da parte autora, no percentual de ${honAutor}% do montante assim fixado, e a parte autora ao pagamento de honorários advocatícios em favor do procurador da parte ré, no percentual de ${honReu}% do mesmo montante.`];
+  }
+
+  // Benefício não concedido
+  if (ctx.isSucumbenciaIntegralReu) {
+    return ['Condeno o réu ao pagamento de honorários advocatícios fixados em 10% sobre o valor atualizado da causa.'];
+  }
+  if (ctx.isSucumbenciaIntegralAutor) {
+    return ['Condeno a parte autora ao pagamento de honorários advocatícios fixados em 10% sobre o valor atualizado da causa.'];
+  }
+  return [`Os honorários advocatícios são fixados em 10% sobre o valor atualizado da causa. Em razão da sucumbência recíproca, condena-se o réu ao pagamento de honorários advocatícios em favor do procurador da parte autora, no percentual de ${honAutor}% dos honorários fixados, e a parte autora ao pagamento de honorários advocatícios em favor do procurador da parte ré, no percentual de ${honReu}% dos honorários fixados.`];
+}
+
+// ── 4) AJG e Custas ─────────────────────────────────────────
+
+function buildAjgECustas(ctx: MinutaCtx): string[] {
+  const parts: string[] = [];
+
+  // AJG — só se há condenação contra a autora
+  if (ctx.hasAjg && !ctx.isSucumbenciaIntegralReu) {
+    parts.push('Suspende-se a exigibilidade das verbas sucumbenciais impostas à parte autora, nos termos do art. 98, §3º, do CPC.');
   }
 
   // Custas
-  parts.push(TEMPLATES.custas);
+  if (ctx.hasAjg) {
+    parts.push('As partes ficam isentas do pagamento de custas, na forma da lei.');
+  } else {
+    parts.push('Condena-se o INSS ao ressarcimento proporcional das custas adiantadas pela parte autora.');
+  }
 
-  return parts.join('\n');
+  return parts;
 }
+
+// ── Montagem final ──────────────────────────────────────────
+
+export function generateMinuta(r: CalcResult): string {
+  const ctx = buildCtx(r);
+
+  const blocks = [
+    ...buildFundamentacao(ctx),
+    ...buildResultadoSucumbencia(ctx),
+    ...buildHonorarios(ctx),
+    ...buildAjgECustas(ctx),
+  ];
+
+  return blocks.join('\n\n');
+}
+
+// ── Memória de cálculo (inalterada) ─────────────────────────
 
 export function generateMemoria(r: CalcResult): string {
   const dec = r.casasDecimais;
