@@ -22,6 +22,7 @@ interface MinutaCtx {
   r: CalcResult;
   dec: number;
   sp: string;
+  sb: string;
   st: string;
   sf: string;
   isBeneficioConcedido: boolean;
@@ -51,6 +52,7 @@ function buildCtx(r: CalcResult): MinutaCtx {
   return {
     r, dec,
     sp: pct(r.scorePeriodos, dec),
+    sb: pct(r.scoreBeneficio, dec),
     st: pct(r.scoreTempo, dec),
     sf: pct(r.scoreFinal, dec),
     isBeneficioConcedido,
@@ -72,26 +74,27 @@ function buildFundamentacao(ctx: MinutaCtx): string[] {
   const parts: string[] = [];
 
   // Abertura
-  parts.push('Para a distribuição dos ônus de sucumbência, adota-se critério objetivo de proveito econômico estimado, à luz do resultado efetivo dos pedidos formulados.');
+  parts.push('Para a distribuição dos ônus de sucumbência, adota-se critério objetivo de proveito econômico estimado, em conformidade com o resultado efetivo dos pedidos deduzidos em juízo.');
 
-  // Metodologia
-  parts.push('Nos pedidos relacionados ao tempo de contribuição, considera-se, com igual peso, o êxito no reconhecimento dos períodos controvertidos e o êxito no pedido de concessão do benefício na data postulada, aferido segundo a diferença entre a DER/DIB requerida e a DIB efetivamente fixada.');
+  // Tempo de contribuição
+  parts.push('Nos pedidos relacionados ao tempo de contribuição, o proveito econômico é aferido a partir de dois vetores com igual peso: o êxito no reconhecimento dos períodos controvertidos e o êxito no pedido de concessão do benefício na data postulada, examinado segundo a diferença entre a DER/DIB requerida e a DIB efetivamente fixada.');
 
   // Subtipo do benefício
   if (!ctx.isBeneficioConcedido) {
-    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Como não houve concessão do benefício, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
+    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Inexistindo concessão do benefício, o vetor correspondente ao pedido de concessão assume valor ${ctx.sb}. Desse modo, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
   } else if (ctx.isDibIgualOuAnterior) {
-    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Tendo o benefício sido deferido na data postulada, ou em data anterior, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
+    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Tendo o benefício sido deferido na data postulada, o vetor correspondente ao pedido de concessão assume valor ${ctx.sb}. Desse modo, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
   } else {
-    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Como o benefício foi deferido em data posterior à DER/DIB requerida, o atendimento do pedido temporal é aferido pela razão entre o retroativo efetivamente obtido na data do ajuizamento (${ctx.r.obtidoDiasRetro} dias) e o retroativo pretendido (${ctx.r.totalDiasRetro} dias), o que conduz a êxito combinado de ${ctx.st} nos pedidos relacionados ao tempo de contribuição.`);
+    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Como o benefício foi deferido em data posterior à DER/DIB requerida, o vetor correspondente ao pedido de concessão é apurado pela razão entre o retroativo efetivamente obtido na data do ajuizamento (${ctx.r.obtidoDiasRetro} dias) e o retroativo pretendido (${ctx.r.totalDiasRetro} dias), resultando em ${ctx.sb}. Desse modo, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
   }
 
-  // Dano moral + fecho
+  // Dano moral
   if (ctx.hasDanos) {
-    parts.push(`Existindo pedido de indenização por dano moral no valor de ${fmtMoney(ctx.r.valorDanos)}, inserido em valor de causa de ${fmtMoney(ctx.r.valorCausa)}, aplica-se redutor proporcional de ${pct(ctx.r.propDecDanos, ctx.dec)}, a fim de refletir a participação econômica do pedido indenizatório rejeitado na composição do valor da causa. Após a incidência desse redutor, extrai-se êxito global de ${ctx.sf} para fins de sucumbência.`);
-  } else {
-    parts.push(`Desse conjunto, extrai-se êxito global de ${ctx.sf} para fins de sucumbência.`);
+    parts.push(`Havendo pedido de indenização por dano moral no valor de ${fmtMoney(ctx.r.valorDanos)}, inserido em valor de causa de ${fmtMoney(ctx.r.valorCausa)}, aplica-se redutor proporcional de ${pct(ctx.r.propDecDanos, ctx.dec)}, a fim de refletir a participação econômica do pedido indenizatório rejeitado na composição do valor da causa.`);
   }
+
+  // Fecho
+  parts.push(`Considerados tais parâmetros, o êxito global para fins de sucumbência corresponde a ${ctx.sf}.`);
 
   return parts;
 }
@@ -100,7 +103,7 @@ function buildFundamentacao(ctx: MinutaCtx): string[] {
 
 function buildResultadoSucumbencia(ctx: MinutaCtx): string[] {
   if (ctx.isSucumbenciaIntegralReu) {
-    return ['Verifica-se que a parte autora decaiu de parcela mínima de seus pedidos, razão pela qual os ônus sucumbenciais devem ser integralmente suportados pela parte ré.'];
+    return ['Verifica-se que a parte autora decaiu de parcela mínima dos pedidos, de modo que os ônus sucumbenciais devem ser integralmente suportados pela parte ré.'];
   }
 
   if (ctx.isSucumbenciaIntegralAutor) {
@@ -113,7 +116,7 @@ function buildResultadoSucumbencia(ctx: MinutaCtx): string[] {
   // Recíproca
   const autorPct = ctx.r.honorAutorPct.toFixed(ctx.dec);
   const reuPct = ctx.r.honorReuPct.toFixed(ctx.dec);
-  return [`Caracterizada a sucumbência recíproca, os ônus sucumbenciais ficam distribuídos na proporção de ${autorPct}% em favor da parte autora e de ${reuPct}% em favor da parte ré.`];
+  return [`Caracterizada a sucumbência recíproca, os ônus sucumbenciais são distribuídos na proporção de ${autorPct}% em favor da parte autora e de ${reuPct}% em favor da parte ré.`];
 }
 
 // ── 3) Honorários ───────────────────────────────────────────
@@ -124,22 +127,22 @@ function buildHonorarios(ctx: MinutaCtx): string[] {
 
   if (ctx.isBeneficioConcedido) {
     if (ctx.isSucumbenciaIntegralReu) {
-      return ['Condena-se o réu ao pagamento de honorários advocatícios, fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença.'];
+      return ['Condeno o réu ao pagamento dos honorários advocatícios, que fixo nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença.'];
     }
     if (ctx.isSucumbenciaIntegralAutor) {
-      return ['Condena-se a parte autora ao pagamento de honorários advocatícios em favor do procurador da parte ré, fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença.'];
+      return ['Os honorários advocatícios são fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data da sentença, ou do acórdão, se for o caso. Condena-se a parte autora ao pagamento integral da verba honorária em favor do procurador da parte ré, não havendo verba honorária devida pelo réu ao patrono da parte autora.'];
     }
-    return [`Os honorários advocatícios são fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença, cabendo ao réu o pagamento de ${honAutor}% desse montante em favor do procurador da parte autora, e à parte autora o pagamento de ${honReu}% em favor do procurador da parte ré.`];
+    return [`Os honorários advocatícios são fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença. Em razão da sucumbência recíproca, condena-se o réu ao pagamento de honorários advocatícios em favor do procurador da parte autora, no percentual de ${honAutor}% do montante assim fixado, e a parte autora ao pagamento de honorários advocatícios em favor do procurador da parte ré, no percentual de ${honReu}% do mesmo montante.`];
   }
 
   // Benefício não concedido
   if (ctx.isSucumbenciaIntegralReu) {
-    return ['Condena-se o réu ao pagamento de honorários advocatícios fixados em 10% sobre o valor atualizado da causa.'];
+    return ['Condeno o réu ao pagamento de honorários advocatícios fixados em 10% sobre o valor atualizado da causa.'];
   }
   if (ctx.isSucumbenciaIntegralAutor) {
-    return ['Condena-se a parte autora ao pagamento de honorários advocatícios fixados em 10% sobre o valor atualizado da causa.'];
+    return ['Condeno a parte autora ao pagamento de honorários advocatícios fixados em 10% sobre o valor atualizado da causa.'];
   }
-  return [`Os honorários advocatícios são fixados em 10% sobre o valor atualizado da causa, cabendo ao réu o pagamento de ${honAutor}% desse montante em favor do procurador da parte autora, e à parte autora o pagamento de ${honReu}% em favor do procurador da parte ré.`];
+  return [`Os honorários advocatícios são fixados em 10% sobre o valor atualizado da causa. Em razão da sucumbência recíproca, condena-se o réu ao pagamento de honorários advocatícios em favor do procurador da parte autora, no percentual de ${honAutor}% dos honorários fixados, e a parte autora ao pagamento de honorários advocatícios em favor do procurador da parte ré, no percentual de ${honReu}% dos honorários fixados.`];
 }
 
 // ── 4) AJG e Custas ─────────────────────────────────────────
@@ -147,10 +150,12 @@ function buildHonorarios(ctx: MinutaCtx): string[] {
 function buildAjgECustas(ctx: MinutaCtx): string[] {
   const parts: string[] = [];
 
+  // AJG — só se há condenação contra a autora
   if (ctx.hasAjg && !ctx.isSucumbenciaIntegralReu) {
     parts.push('Suspende-se a exigibilidade das verbas sucumbenciais impostas à parte autora, nos termos do art. 98, §3º, do CPC.');
   }
 
+  // Custas
   if (ctx.hasAjg) {
     parts.push('As partes ficam isentas do pagamento de custas, na forma da lei.');
   } else {
@@ -175,7 +180,7 @@ export function generateMinuta(r: CalcResult): string {
   return blocks.join('\n\n');
 }
 
-// ── Memória de cálculo ──────────────────────────────────────
+// ── Memória de cálculo (inalterada) ─────────────────────────
 
 export function generateMemoria(r: CalcResult): string {
   const dec = r.casasDecimais;
