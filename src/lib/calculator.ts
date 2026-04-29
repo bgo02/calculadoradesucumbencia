@@ -3,7 +3,17 @@
  * All formulas are documented inline for auditability.
  */
 
-import { parsePeriods, consolidate, countDays, intersect } from './periodParser';
+import {
+  parsePeriods,
+  consolidate,
+  countDays,
+  intersect,
+  parseSingleDate,
+  MS_PER_DAY,
+} from './periodParser';
+
+/** Tolerância numérica para comparações de ponto flutuante. */
+const EPSILON = 1e-9;
 
 export interface CalcInput {
   periodosControvertidos: string;
@@ -69,29 +79,38 @@ export interface CalcResult {
   warnings: CalcWarning[];
 }
 
-function parseOneDate(s: string): Date | null {
-  if (!s.trim()) return null;
-  const m = s.trim().match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
-  if (!m) return null;
-  let day = parseInt(m[1], 10);
-  let month = parseInt(m[2], 10) - 1;
-  let year = parseInt(m[3], 10);
-  if (year < 100) year += year < 50 ? 2000 : 1900;
-  const dt = new Date(year, month, day);
-  return isNaN(dt.getTime()) ? null : dt;
-}
-
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
+/**
+ * Dias entre duas datas, contagem inclusiva:
+ *   daysBetween(01/01, 31/01) = 31.
+ * Unifica a convenção adotada em countDays (períodos), de modo que
+ * ambos os componentes do score (períodos e retroativo) utilizem a
+ * mesma unidade de medida.
+ */
 function daysBetween(a: Date, b: Date): number {
-  return Math.floor((b.getTime() - a.getTime()) / 86400000);
+  return Math.floor((b.getTime() - a.getTime()) / MS_PER_DAY) + 1;
 }
 
 function roundTo(v: number, decimals: number): number {
   const f = Math.pow(10, decimals);
   return Math.round(v * f) / f;
+}
+
+/**
+ * Normaliza pequenos resíduos de ponto flutuante para 0 ou 1.
+ * Operações como scoreTempo * (1 - propDecDanos) podem produzir,
+ * em certos cenários, valores como 0.999…998 ou 1.000…002. Sem
+ * normalização, comparações de igualdade exata usadas no gerador
+ * de minuta podem disparar o ramo errado (ex.: sucumbência
+ * recíproca em lugar de sucumbência integral).
+ */
+function snap(v: number): number {
+  if (Math.abs(v) < EPSILON) return 0;
+  if (Math.abs(v - 1) < EPSILON) return 1;
+  return v;
 }
 
 export function calculate(input: CalcInput): { result: CalcResult; errors: string[] } {
@@ -115,13 +134,27 @@ export function calculate(input: CalcInput): { result: CalcResult; errors: strin
   const scorePeriodos = diasCont > 0 ? clamp(diasAcol / diasCont, 0, 1) : 0;
 
   // Parse benefit dates
-  const ajuizamento = parseOneDate(input.dataAjuizamento);
-  const derPedida = parseOneDate(input.derPedida);
-  const dibFixada = input.beneficioConcedido ? parseOneDate(input.dibFixada) : null;
+  const ajuizamento = parseSingleDate(input.dataAjuizamento);
+  const derPedida = parseSingleDate(input.derPedida);
+  const dibFixada = input.beneficioConcedido ? parseSingleDate(input.dibFixada) : null;
 
   if (!ajuizamento) errors.push('Informe a data do ajuizamento.');
-  if (!derPedida) errors.push('Informe a DER/DIB pedida.');
+  if (!derPedida) errors.push('Informe a DIB postulada.');
   if (input.beneficioConcedido && !dibFixada) errors.push('Informe a DIB fixada (benefício concedido).');
+
+  // Sanity check: datas futuras
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const isFuture = (d: Date | null): boolean => !!d && d > todayUtc;
+  if (isFuture(ajuizamento)) {
+    warnings.push({ field: 'dataAjuizamento', message: 'Data de ajuizamento posterior a hoje; verifique.' });
+  }
+  if (isFuture(derPedida)) {
+    warnings.push({ field: 'derPedida', message: 'DIB postulada posterior a hoje; verifique.' });
+  }
+  if (isFuture(dibFixada)) {
+    warnings.push({ field: 'dibFixada', message: 'DIB fixada posterior a hoje; verifique.' });
+  }
 
   // Score benefício
   let scoreBeneficio = 0;
@@ -142,7 +175,7 @@ export function calculate(input: CalcInput): { result: CalcResult; errors: strin
         scoreBeneficio = dibFixada <= derPedida ? 1 : 0;
         warnings.push({
           field: 'derPedida',
-          message: 'DER/DIB pedida igual ou posterior ao ajuizamento; verifique as datas.'
+          message: 'DIB postulada igual ou posterior ao ajuizamento; verifique as datas.',
         });
       } else {
         scoreBeneficio = clamp(obtidoDiasRetro / totalDiasRetro, 0, 1);
@@ -162,13 +195,16 @@ export function calculate(input: CalcInput): { result: CalcResult; errors: strin
   // Score final
   const scoreFinal = scoreTempo * (1 - propDecDanos);
 
-  // Sucumbência mínima
-  const limiar = input.limiarSucumbencia / 100;
-  let autorShare = scoreFinal;
-  let reuShare = 1 - scoreFinal;
+  // Normaliza resíduos de ponto flutuante para valores limpos,
+  // assegurando que o gerador de minuta receba sempre 0 ou 1 exatos
+  // quando o resultado matemático assim o indicar.
+  let autorShare = snap(scoreFinal);
+  let reuShare = snap(1 - autorShare);
   let sucumbMinAplicada = false;
   let sucumbMinRegra = '';
 
+  // Sucumbência mínima
+  const limiar = input.limiarSucumbencia / 100;
   if (autorShare < limiar && autorShare > 0) {
     autorShare = 0;
     reuShare = 1;
