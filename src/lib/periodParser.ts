@@ -1,21 +1,47 @@
 /**
  * Period Parser — accepts free-text with dates in various formats.
  * Returns sorted, consolidated intervals as [start, end] Date pairs.
- * Convention: both dates inclusive; 1 month = 30 days; 1 year = 365 days.
+ * Convention: both dates inclusive; contagem em dias corridos + 1.
  */
 
-const DATE_RE =
-  /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/g;
+/** Milissegundos em um dia (constante compartilhada). */
+export const MS_PER_DAY = 86_400_000;
 
-function parseDate(d: string, m: string, y: string): Date | null {
-  let day = parseInt(d, 10);
-  let month = parseInt(m, 10) - 1;
+const DATE_RE = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/g;
+
+/**
+ * Cria uma Date em UTC a partir dos componentes dd/mm/aaaa.
+ * O uso de UTC elimina efeitos indesejados de fuso horário e de
+ * eventuais transições de horário de verão em datas históricas.
+ * Também valida overflow silencioso (ex.: 31/04 → 01/05).
+ */
+export function parseDate(d: string, m: string, y: string): Date | null {
+  const day = parseInt(d, 10);
+  const month = parseInt(m, 10) - 1;
   let year = parseInt(y, 10);
   if (year < 100) year += year < 50 ? 2000 : 1900;
   if (month < 0 || month > 11 || day < 1 || day > 31) return null;
-  const dt = new Date(year, month, day);
+  const dt = new Date(Date.UTC(year, month, day));
   if (isNaN(dt.getTime())) return null;
+  if (
+    dt.getUTCFullYear() !== year ||
+    dt.getUTCMonth() !== month ||
+    dt.getUTCDate() !== day
+  ) {
+    return null;
+  }
   return dt;
+}
+
+/**
+ * Parse a single date string like "dd/mm/aaaa".
+ * Returns null if empty or malformed.
+ */
+export function parseSingleDate(s: string): Date | null {
+  if (!s.trim()) return null;
+  const m = s.trim().match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  if (!m) return null;
+  return parseDate(m[1], m[2], m[3]);
 }
 
 export interface Period {
@@ -50,8 +76,7 @@ export function consolidate(periods: Period[]): Period[] {
     const last = result[result.length - 1];
     const cur = sorted[i];
     // Contiguous: next day or overlapping
-    const nextDay = new Date(last.end);
-    nextDay.setDate(nextDay.getDate() + 1);
+    const nextDay = new Date(last.end.getTime() + MS_PER_DAY);
     if (cur.start <= nextDay) {
       if (cur.end > last.end) last.end = cur.end;
     } else {
@@ -61,17 +86,17 @@ export function consolidate(periods: Period[]): Period[] {
   return result;
 }
 
-/** Count days inclusive */
+/** Count days inclusive (start and end both counted). */
 export function countDays(periods: Period[]): number {
   let total = 0;
   for (const p of periods) {
-    const diff = Math.floor((p.end.getTime() - p.start.getTime()) / 86400000) + 1;
+    const diff = Math.floor((p.end.getTime() - p.start.getTime()) / MS_PER_DAY) + 1;
     if (diff > 0) total += diff;
   }
   return total;
 }
 
-/** Intersect accepted periods with disputed periods (limit to universe) */
+/** Intersect accepted periods with disputed periods (limit to universe). */
 export function intersect(disputed: Period[], accepted: Period[]): Period[] {
   const result: Period[] = [];
   for (const a of accepted) {
@@ -87,9 +112,9 @@ export function intersect(disputed: Period[], accepted: Period[]): Period[] {
 }
 
 export function formatDate(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const yyyy = d.getUTCFullYear();
   return `${dd}/${mm}/${yyyy}`;
 }
 
