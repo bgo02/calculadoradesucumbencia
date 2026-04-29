@@ -42,6 +42,9 @@ function buildCtx(r: CalcResult): MinutaCtx {
   const isDibIgualOuAnterior = isBeneficioConcedido && !!r.dibFixada && !!r.derPedida && r.dibFixada <= r.derPedida;
   const isDibPosterior = isBeneficioConcedido && !isDibIgualOuAnterior;
 
+  // Após a normalização em calculator.ts, autorShare e reuShare são
+  // sempre exatamente 0 ou 1 quando não há sucumbência recíproca,
+  // o que torna seguras as comparações de igualdade abaixo.
   const isMinimaReu = r.sucumbMinAplicada && r.autorShare === 1;
   const isMinimaAutor = r.sucumbMinAplicada && r.autorShare === 0;
   const isSucumbenciaIntegralReu = r.autorShare === 1;
@@ -75,20 +78,20 @@ function buildFundamentacao(ctx: MinutaCtx): string[] {
   parts.push('Para a distribuição dos ônus de sucumbência, adota-se critério objetivo de proveito econômico estimado, à luz do resultado efetivo dos pedidos formulados.');
 
   // Metodologia
-  parts.push('Nos pedidos relacionados ao tempo de contribuição, consideram-se, com igual peso, o êxito no reconhecimento dos períodos controvertidos e o êxito no pedido de concessão do benefício na data postulada, aferido segundo a diferença entre a DER/DIB requerida e a DIB efetivamente fixada.');
+  parts.push('Nos pedidos relacionados ao tempo de contribuição, consideram-se, com igual peso, o êxito no reconhecimento dos períodos controvertidos e o êxito no pedido de concessão do benefício na data postulada, aferido segundo a diferença entre a DIB postulada e a DIB efetivamente fixada.');
 
   // Aplicação ao caso
   if (!ctx.isBeneficioConcedido) {
     parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Como não houve concessão do benefício, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
   } else if (ctx.isDibIgualOuAnterior) {
-    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Tendo o benefício sido deferido na data postulada, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
+    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Concedido o benefício na data postulada, o êxito combinado nos pedidos relacionados ao tempo de contribuição corresponde a ${ctx.st}.`);
   } else {
-    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Como o benefício foi deferido em data posterior à DER/DIB requerida, o atendimento do pedido temporal é aferido pela razão entre o retroativo efetivamente obtido na data do ajuizamento (${ctx.r.obtidoDiasRetro} dias) e o retroativo pretendido (${ctx.r.totalDiasRetro} dias), o que conduz a êxito combinado de ${ctx.st} nos pedidos relacionados ao tempo de contribuição.`);
+    parts.push(`Na hipótese, o êxito quanto aos períodos controvertidos corresponde a ${ctx.sp}. Como o benefício foi deferido em data posterior à DIB postulada, o atendimento do pedido temporal é aferido pela razão entre o retroativo efetivamente obtido na data do ajuizamento (${ctx.r.obtidoDiasRetro} dias) e o retroativo pretendido (${ctx.r.totalDiasRetro} dias), o que conduz a êxito combinado de ${ctx.st} nos pedidos relacionados ao tempo de contribuição.`);
   }
 
   // Dano moral + fecho
   if (ctx.hasDanos) {
-    parts.push(`Existindo pedido de indenização por dano moral no valor de ${fmtMoney(ctx.r.valorDanos)}, inserido em valor total atribuído à causa de ${fmtMoney(ctx.r.valorCausa)}, aplica-se redutor proporcional de ${pct(ctx.r.propDecDanos, ctx.dec)}, a fim de refletir a participação econômica do pedido indenizatório rejeitado na composição do valor da causa. Após a incidência desse redutor, extrai-se êxito global de ${ctx.sf} para fins de sucumbência.`);
+    parts.push(`Existindo pedido de indenização por dano moral no valor de ${fmtMoney(ctx.r.valorDanos)}, componente do valor atribuído à causa (${fmtMoney(ctx.r.valorCausa)}), aplica-se redutor proporcional de ${pct(ctx.r.propDecDanos, ctx.dec)}, refletindo a participação econômica do pedido indenizatório rejeitado. Após a incidência desse redutor, extrai-se êxito global de ${ctx.sf} para fins de sucumbência.`);
   } else {
     parts.push(`Desse conjunto, extrai-se êxito global de ${ctx.sf} para fins de sucumbência.`);
   }
@@ -124,12 +127,12 @@ function buildHonorarios(ctx: MinutaCtx): string[] {
 
   if (ctx.isBeneficioConcedido) {
     if (ctx.isSucumbenciaIntegralReu) {
-      return ['Condena-se o réu ao pagamento de honorários advocatícios, fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença.'];
+      return ['Condena-se o réu ao pagamento de honorários advocatícios, fixados no patamar mínimo da faixa aplicável do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença.'];
     }
     if (ctx.isSucumbenciaIntegralAutor) {
-      return ['Condena-se a parte autora ao pagamento de honorários advocatícios em favor do procurador da parte ré, fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença.'];
+      return ['Condena-se a parte autora ao pagamento de honorários advocatícios em favor do procurador da parte ré, fixados no patamar mínimo da faixa aplicável do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença.'];
     }
-    return [`Os honorários advocatícios são fixados nos patamares mínimos do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença, cabendo ao réu o pagamento de ${honAutor}% desse montante em favor do procurador da parte autora, e à parte autora o pagamento de ${honReu}% em favor do procurador da parte ré.`];
+    return [`Os honorários advocatícios são fixados no patamar mínimo da faixa aplicável do art. 85, §3º, do CPC, observada a Súmula 111 do STJ, incidindo sobre as parcelas vencidas até a data desta sentença, cabendo ao réu o pagamento de ${honAutor}% desse montante em favor do procurador da parte autora, e à parte autora o pagamento de ${honReu}% em favor do procurador da parte ré.`];
   }
 
   // Benefício não concedido
@@ -193,7 +196,7 @@ export function generateMemoria(r: CalcResult): string {
   lines.push('▸ BENEFÍCIO / PEDIDO TEMPORAL');
   lines.push(`  Concedido: ${r.beneficioConcedido ? 'Sim' : 'Não'}`);
   if (r.ajuizamento) lines.push(`  Data do ajuizamento: ${formatDate(r.ajuizamento)}`);
-  if (r.derPedida) lines.push(`  DER/DIB pedida: ${formatDate(r.derPedida)}`);
+  if (r.derPedida) lines.push(`  DIB postulada: ${formatDate(r.derPedida)}`);
   if (r.dibFixada) lines.push(`  DIB fixada: ${formatDate(r.dibFixada)}`);
   if (r.marcoDefinidoPor) lines.push(`  Marco definido por: ${r.marcoDefinidoPor}`);
   if (r.beneficioConcedido) {
