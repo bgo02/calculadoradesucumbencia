@@ -49,7 +49,7 @@ export function CalculationMemory({ result: r }: Props) {
             <div className="space-y-0.5 text-muted-foreground">
               <p>Concedido: <span className="font-mono text-foreground">{r.beneficioConcedido ? 'Sim' : 'Não'}</span></p>
               {r.ajuizamento && <p>Ajuizamento: <span className="font-mono text-foreground">{formatDate(r.ajuizamento)}</span></p>}
-              {r.derPedida && <p>DER/DIB pedida: <span className="font-mono text-foreground">{formatDate(r.derPedida)}</span></p>}
+              {r.derPedida && <p>DIB postulada: <span className="font-mono text-foreground">{formatDate(r.derPedida)}</span></p>}
               {r.dibFixada && <p>DIB fixada: <span className="font-mono text-foreground">{formatDate(r.dibFixada)}</span></p>}
               {r.marcoDefinidoPor && <p>Marco: <span className="font-mono text-foreground">{r.marcoDefinidoPor}</span></p>}
               {r.beneficioConcedido && (
